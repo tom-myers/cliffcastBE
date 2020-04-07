@@ -99,8 +99,8 @@ func MinMax(array []int64) (int64, int64) {
 	return min, max
 }
 
-// quickPrint just displays to console (and now returns Final)
-func quickPrint(f Final) Final {
+// format sorts returned data into required parts and format
+func format(f Final) Final {
 	var r Final
 	rmin, rmax := MinMax(f.RainChance)
 	tmin, tmax := MinMax(f.Temp)
@@ -116,13 +116,6 @@ func quickPrint(f Final) Final {
 	r.Gust = append(r.Gust, gmin, gmax)
 	r.Humid = append(r.Humid, hmin, hmax)
 
-	fmt.Println(f.Day)
-	fmt.Printf("chance of rain between %d percent and %d percent\n", rmin, rmax)
-	fmt.Printf("total rain = %.2f cm\n", f.RainTotal)
-	fmt.Printf("temp between %dc and %dc\n", tmin, tmax)
-	fmt.Printf("wind speed between %dmph and %dmph\n", wmin, wmax)
-	fmt.Printf("gusts between %d and %d\n", gmin, gmax)
-	fmt.Printf("humidity between %d and %d\n", hmin, hmax)
 	return r
 }
 
@@ -195,9 +188,9 @@ func forecast(fCast []Res) (Final, Final, Final) {
 
 	}
 
-	d1 = quickPrint(d1)
-	d2 = quickPrint(d2)
-	d3 = quickPrint(d3)
+	d1 = format(d1)
+	d2 = format(d2)
+	d3 = format(d3)
 	return d1, d2, d3
 
 }
@@ -209,31 +202,47 @@ func Call(w http.ResponseWriter, r *http.Request) {
 
 // Refresh resfreshes data
 func Refresh(w http.ResponseWriter, r *http.Request) {
-	Start()
+
 	fmt.Fprint(w, "refreshing!")
+
 }
 
-// GetURL posts URL
-func GetURL(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "expects to be passed a URL") // future proofing to allow for more locations to be added
+// GetData posts URL
+func GetData(w http.ResponseWriter, r *http.Request) {
+	body, err := ioutil.ReadAll(r.Body)
+	check(err)
+	b := string(body)
+
+	fmt.Fprintln(w, b)
+	Start(b)
+	fmt.Fprint(w, d1, d2, d3)
 }
 
 // Start is used to get info and start passing info about
-func Start() {
+func Start(u string) {
 
-	url := "http://ws1.metcheck.com/ENGINE/v9_0/json.asp?lat=53.9&lon=-1.6&lid=67633&Fc=No"
-	info := getInfo(url)
+	urls := map[string]string{
+		"cliff":      "http://ws1.metcheck.com/ENGINE/v9_0/json.asp?lat=53.9&lon=-1.6&lid=67633&Fc=No",
+		"trollers":   "http://ws1.metcheck.com/ENGINE/v9_0/json.asp?lat=54.1&lon=-1.9&lid=68468&Fc=No",
+		"slipstones": "http://ws1.metcheck.com/ENGINE/v9_0/json.asp?lat=54.2&lon=-1.8&lid=67808&Fc=No",
+		"caley":      "http://ws1.metcheck.com/ENGINE/v9_0/json.asp?lat=53.9&lon=-1.7&lid=67799&Fc=No",
+	}
+	if u == " " {
+		u = "cliff"
+	}
+	info := getInfo(urls[u])
 	unmarsh := unmarshal(info)
 	forecast(unmarsh)
 
 }
 
 func main() {
-	Start()
+
+	//Start(" ")
 	r := mux.NewRouter().StrictSlash(true)
 	r.HandleFunc("/call", Call).Methods("GET")
-	r.HandleFunc("/refresh", Refresh).Methods("GET")
-	r.HandleFunc("/Url", GetURL).Methods("POST")
+	r.HandleFunc("/refresh", Refresh).Methods("GET") // pretty sure this can just be in the call
+	r.HandleFunc("/check", GetData).Methods("POST")
 	http.Handle("/", r)
 	log.Fatal(http.ListenAndServe(":8080", handlers.CORS(handlers.AllowedMethods([]string{"GET", "POST"}), handlers.AllowedOrigins([]string{"*"}))(r)))
 
