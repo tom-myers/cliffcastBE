@@ -14,6 +14,8 @@ import (
 )
 
 var d1, d2, d3 Final
+var f1, f2, f3 FinalJSON
+var b1, b2, b3 []byte
 
 // R1 is top level struct
 type R1 struct {
@@ -39,6 +41,22 @@ type Final struct {
 	Wind       []int64
 	Gust       []int64
 	Humid      []int64
+}
+
+// FinalJSON is testing final as json
+type FinalJSON struct {
+	Day           string
+	RainTotal     float32
+	MinRainChance int64
+	MaxRainChance int64
+	MinTemp       int64
+	MaxTemp       int64
+	MinWind       int64
+	MaxWind       int64
+	MinGust       int64
+	MaxGust       int64
+	MinHumid      int64
+	MaxHumid      int64
 }
 
 // Res represents the things we actually want from the json response
@@ -100,30 +118,38 @@ func MinMax(array []int64) (int64, int64) {
 }
 
 // format sorts returned data into required parts and format
-func format(f Final) Final {
-	var r Final
+func format(f Final) []byte {
+
+	var fj FinalJSON
 	rmin, rmax := MinMax(f.RainChance)
 	tmin, tmax := MinMax(f.Temp)
 	wmin, wmax := MinMax(f.Wind)
 	gmin, gmax := MinMax(f.Gust)
 	hmin, hmax := MinMax(f.Humid)
 
-	r.Day = f.Day
-	r.RainTotal = f.RainTotal // math.Round(f.RainTotal) - rounds to whole?!?!?
-	r.RainChance = append(r.RainChance, rmin, rmax)
-	r.Temp = append(r.Temp, tmin, tmax)
-	r.Wind = append(r.Wind, wmin, wmax)
-	r.Gust = append(r.Gust, gmin, gmax)
-	r.Humid = append(r.Humid, hmin, hmax)
+	fj.Day = f.Day
+	fj.RainTotal = float32(f.RainTotal)
+	fj.MaxRainChance = rmax
+	fj.MinRainChance = rmin
+	fj.MaxTemp = tmax
+	fj.MinTemp = tmin
+	fj.MaxWind = wmax
+	fj.MinWind = wmin
+	fj.MaxGust = gmax
+	fj.MinGust = gmin
+	fj.MaxHumid = hmax
+	fj.MinHumid = hmin
 
-	return r
+	b, err := json.Marshal(fj)
+	check(err)
+
+	return b
 }
 
 // forecast checks through forecast for next 7 days
-func forecast(fCast []Res) (Final, Final, Final) {
+func forecast(fCast []Res) ([]byte, []byte, []byte) {
 
 	var tDay string
-	//var d1, d2, d3 Final
 	loc, _ := time.LoadLocation("UTC")
 	layout := "2006-01-02T15:04:05"
 
@@ -171,7 +197,7 @@ func forecast(fCast []Res) (Final, Final, Final) {
 			d2.Temp = append(d2.Temp, xTemp)
 			d2.Humid = append(d2.Humid, xHumid)
 
-		case diff.Hours() == -48: //day after
+		case diff.Hours() == -48: // day after
 
 			tDay = t.DayN
 			d3.Day = tDay
@@ -188,23 +214,11 @@ func forecast(fCast []Res) (Final, Final, Final) {
 
 	}
 
-	d1 = format(d1)
-	d2 = format(d2)
-	d3 = format(d3)
-	return d1, d2, d3
+	b1 = format(d1)
+	b2 = format(d2)
+	b3 = format(d3)
 
-}
-
-// Call returns data
-func Call(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprint(w, d1, d2, d3)
-}
-
-// Refresh resfreshes data
-func Refresh(w http.ResponseWriter, r *http.Request) {
-
-	fmt.Fprint(w, "refreshing!")
-
+	return b1, b2, b3
 }
 
 // GetData posts URL
@@ -213,9 +227,9 @@ func GetData(w http.ResponseWriter, r *http.Request) {
 	check(err)
 	b := string(body)
 
-	fmt.Fprintln(w, b)
+	//fmt.Fprintln(w, b)
 	Start(b)
-	fmt.Fprint(w, d1, d2, d3)
+	fmt.Fprint(w, string(b1), string(b2), string(b3))
 }
 
 // Start is used to get info and start passing info about
@@ -238,10 +252,7 @@ func Start(u string) {
 
 func main() {
 
-	//Start(" ")
 	r := mux.NewRouter().StrictSlash(true)
-	r.HandleFunc("/call", Call).Methods("GET")
-	r.HandleFunc("/refresh", Refresh).Methods("GET") // pretty sure this can just be in the call
 	r.HandleFunc("/check", GetData).Methods("POST")
 	http.Handle("/", r)
 	log.Fatal(http.ListenAndServe(":8080", handlers.CORS(handlers.AllowedMethods([]string{"GET", "POST"}), handlers.AllowedOrigins([]string{"*"}))(r)))
